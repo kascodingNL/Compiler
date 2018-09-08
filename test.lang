@@ -1,0 +1,3 @@
+def num(x, y) {
+	return (x + 186) * (y + 3);
+}
