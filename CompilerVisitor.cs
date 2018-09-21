@@ -13,14 +13,44 @@ namespace Compiler
     {
         private LLVMModuleRef module;
         private LLVMValueRef method;
-        private string[] parameterNames;
         private LLVMBuilderRef builder;
+        private Stack<Context> contexts;
+        private LLVMPassManagerRef passManager;
 
         public override CompilerResult VisitFile([NotNull] LangParser.FileContext context)
         {
             module = LLVM.ModuleCreateWithName("Lang");
+            contexts = new Stack<Context>();
+
+            LLVMPassManagerRef passManager = LLVM.CreateFunctionPassManagerForModule(module);
+
+            // Set up the optimizer pipeline.  Start with registering info about how the
+            // target lays out data structures.
+            // LLVM.DisposeTargetData(LLVM.GetExecutionEngineTargetData(engine));
+
+            // Provide basic AliasAnalysis support for GVN.
+            LLVM.AddBasicAliasAnalysisPass(passManager);
+
+            // Promote allocas to registers.
+            LLVM.AddPromoteMemoryToRegisterPass(passManager);
+
+            // Do simple "peephole" optimizations and bit-twiddling optzns.
+            LLVM.AddInstructionCombiningPass(passManager);
+
+            // Reassociate expressions.
+            LLVM.AddReassociatePass(passManager);
+
+            // Eliminate Common SubExpressions.
+            LLVM.AddGVNPass(passManager);
+
+            // Simplify the control flow graph (deleting unreachable blocks, etc).
+            LLVM.AddCFGSimplificationPass(passManager);
+
+            LLVM.InitializeFunctionPassManager(passManager);
+            this.passManager = passManager;
 
             base.VisitFile(context);
+
 
 
             LLVM.VerifyModule(module, LLVMVerifierFailureAction.LLVMPrintMessageAction, out string str);
@@ -29,19 +59,20 @@ namespace Compiler
 
             LLVM.WriteBitcodeToFile(module, @"C:\Users\superblaubeere27\Desktop\compilerTest\Compiler\Compiler\code\compiled.bc");
 
+            LLVM.DisposePassManager(passManager);
+            LLVM.DisposeModule(module);
 
-            return new NullCompilerResult();
+
+            return NullCompilerResult.INSTANCE;
         }
 
         public override CompilerResult VisitMethod([NotNull] LangParser.MethodContext context)
         {
             var @params = context.parameter_declaration().NAME();
-            parameterNames = new string[@params.Count()];
             LLVMTypeRef[] paramTypes = new LLVMTypeRef[@params.Count()];
 
             for (int i = 0; i < @params.Count(); i++)
             {
-                parameterNames[i] = @params[i].GetText();
                 paramTypes[i] = LLVM.Int32Type();
             }
 
@@ -50,15 +81,49 @@ namespace Compiler
             builder = LLVM.CreateBuilder();
             LLVM.PositionBuilderAtEnd(builder, entryBlock);
 
+            PushContext();
+
+            for (uint i = 0; i < @params.Count(); i++)
+            {
+                CurrContext().registerParameter(method, @params[i].GetText(), i);
+            }
+
             base.VisitMethod(context);
 
+            LLVM.RunFunctionPassManager(passManager, method);
 
-            return new NullCompilerResult();
+            PopContext();
+
+            LLVM.DisposeBuilder(builder);
+
+
+            return NullCompilerResult.INSTANCE;
+        }
+
+        private Context CurrContext()
+        {
+            return contexts.Peek();
+        }
+
+        private void PopContext()
+        {
+            contexts.Pop();
+        }
+
+        private void PushContext()
+        {
+            contexts.Push(new Context(contexts.Count > 0 ? contexts.Peek() : null));
         }
 
         public override CompilerResult VisitBlock([NotNull] LangParser.BlockContext context)
         {
-            return base.VisitBlock(context);
+            PushContext();
+
+            base.VisitBlock(context);
+
+            PopContext();
+
+            return NullCompilerResult.INSTANCE;
         }
 
         public override CompilerResult VisitExpression([NotNull] LangParser.ExpressionContext context)
@@ -67,23 +132,30 @@ namespace Compiler
             if (context.NAME() != null)
             {
                 string name = context.NAME().GetText();
-                int parameterIndex = -1;
+                
+                Parameter parameter = CurrContext().lookupParameter(name);
+                LLVMValueRef? @ref = null;
 
-                for (int i = 0; i < parameterNames.Count(); i++)
+                if (parameter != null)
                 {
-                    if (parameterNames[i].Equals(name))
+                    @ref = parameter.Load();
+                } else
+                {
+                    LocalVariable lv = CurrContext().lookupLocalVar(name);
+
+                    if (lv != null)
                     {
-                        parameterIndex = i;
+                        @ref = lv.Load(builder);
                     }
                 }
 
 
-                if (parameterIndex == -1)
+                if (!@ref.HasValue)
                 {
-                    throw new Exception("There is no parameter with name " + name);
+                    throw new Exception("Lookup failed " + name);
                 }
 
-                return new Int32CompilerResult(LLVM.GetParam(method, (uint) parameterIndex));
+                return new Int32CompilerResult(@ref.Value);
             }
 
             if (context.NUMBER() != null)
@@ -130,7 +202,32 @@ namespace Compiler
         public override CompilerResult VisitReturn_statement([NotNull] LangParser.Return_statementContext context)
         {
             LLVM.BuildRet(builder, ((Int32CompilerResult)VisitExpression(context.expression())).reference);
-            return new NullCompilerResult();
+            return NullCompilerResult.INSTANCE;
+        }
+
+        public override CompilerResult VisitVar_declaration([NotNull] LangParser.Var_declarationContext context)
+        {
+            LocalVariable lv = CurrContext().registerLocalVariable(builder, method, context.NAME().GetText());
+
+            if (context.expression() != null)
+            {
+                lv.Assign(builder, (Int32CompilerResult) VisitExpression(context.expression()));
+            }
+
+            return NullCompilerResult.INSTANCE;
+        }
+
+        public override CompilerResult VisitAssignment([NotNull] LangParser.AssignmentContext context)
+        {
+            LocalVariable lv = CurrContext().lookupLocalVar(context.NAME().GetText());
+
+            if (lv == null)
+            {
+                throw new Exception("Lookup failed: " + context.NAME().GetText());
+            }
+            
+
+            return new Int32CompilerResult(lv.Assign(builder, (Int32CompilerResult)VisitExpression(context.expression())));
         }
     }
 }

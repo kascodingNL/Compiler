@@ -1,8 +1,8 @@
 #include <iostream>
 
-extern "C" int num(int, int);
+extern "C" int num(int);
 
 int main() {
-    std::cout << "Output of num(5, 3): " << num(5, 3) << std::endl;
+    std::cout << "Output of num(1): " << num(1) << std::endl;
     return 0;
 }

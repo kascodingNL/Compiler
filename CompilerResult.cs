@@ -13,7 +13,12 @@ namespace Compiler
     }
     class NullCompilerResult : CompilerResult
     {
+        public static NullCompilerResult INSTANCE = new NullCompilerResult();
 
+        private NullCompilerResult()
+        {
+
+        }
     }
     class Int32CompilerResult : CompilerResult
     {

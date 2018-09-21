@@ -105,6 +105,9 @@
   <ItemGroup>
     <Compile Include="CompilerResult.cs" />
     <Compile Include="CompilerVisitor.cs" />
+    <Compile Include="Context.cs" />
+    <Compile Include="LocalVariable.cs" />
+    <Compile Include="Parameter.cs" />
     <Compile Include="Parser\LangBaseVisitor.cs" />
     <Compile Include="Parser\LangLexer.cs" />
     <Compile Include="Parser\LangParser.cs" />

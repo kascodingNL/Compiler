@@ -7,7 +7,10 @@ method: 'def' NAME parameter_declaration block;
 parameter_declaration: '(' NAME? (',' NAME)* ')';
 block: '{' statement* '}';
 
-statement: (return_statement) (';' | NEWLINE);
+var_declaration: 'var' NAME ('=' expression)?;
+assignment: NAME '=' expression;
+
+statement: (return_statement | var_declaration | assignment) (';' | NEWLINE);
 return_statement: 'return' expression;
 
 expression
@@ -18,6 +21,7 @@ expression
 
     | expression ADD expression
     | expression SUBSTRACT expression
+    | assignment
     | NUMBER
     | NAME
     ;

@@ -57,6 +57,18 @@ public interface ILangVisitor<Result> : IParseTreeVisitor<Result> {
 	/// <return>The visitor result.</return>
 	Result VisitBlock([NotNull] LangParser.BlockContext context);
 	/// <summary>
+	/// Visit a parse tree produced by <see cref="LangParser.var_declaration"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitVar_declaration([NotNull] LangParser.Var_declarationContext context);
+	/// <summary>
+	/// Visit a parse tree produced by <see cref="LangParser.assignment"/>.
+	/// </summary>
+	/// <param name="context">The parse tree.</param>
+	/// <return>The visitor result.</return>
+	Result VisitAssignment([NotNull] LangParser.AssignmentContext context);
+	/// <summary>
 	/// Visit a parse tree produced by <see cref="LangParser.statement"/>.
 	/// </summary>
 	/// <param name="context">The parse tree.</param>
